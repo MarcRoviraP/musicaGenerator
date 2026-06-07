@@ -5,49 +5,101 @@ const API_BASE = 'https://api.magiclight.ai/api/user';
 const SERVER_BASE = 'https://server.magiclight.ai/task-schedule/music';
 
 export default function App() {
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [step, setStep] = useState<'email' | 'code' | 'generate' | 'generating' | 'result'>('email');
+  const [step, setStep] = useState<'start' | 'auto-login' | 'generate' | 'generating' | 'result'>('start');
+  const [autoLoginProgress, setAutoLoginProgress] = useState('');
   const [refreshToken, setRefreshToken] = useState('');
   const [musicIds, setMusicIds] = useState<string[]>([]);
   const [audioUrls, setAudioUrls] = useState<{ id: string; url: string; cover: string; title: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSendCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAutoLogin = async () => {
+    setStep('auto-login');
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/send-sms-code`, {
+      // 1. Get Domains
+      setAutoLoginProgress('Buscando dominios de correo...');
+      const domRes = await fetch('https://api.mail.tm/domains');
+      const domData = await domRes.json();
+      if (!domData['hydra:member'] || domData['hydra:member'].length === 0) {
+        throw new Error('No hay dominios disponibles en Mail.tm');
+      }
+      const domain = domData['hydra:member'][0].domain;
+
+      // 2. Create Account
+      setAutoLoginProgress('Creando cuenta temporal...');
+      const randomStr = Math.random().toString(36).substring(2, 10);
+      const email = `${randomStr}@${domain}`;
+      const password = `${randomStr}123!`;
+      
+      const accRes = await fetch('https://api.mail.tm/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: email, password })
+      });
+      if (!accRes.ok) throw new Error('Error al crear la cuenta de correo');
+
+      // 3. Get Token
+      const tokenRes = await fetch('https://api.mail.tm/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: email, password })
+      });
+      const { token: mailToken } = await tokenRes.json();
+      if (!mailToken) throw new Error('Error al obtener el token del correo');
+
+      // 4. Send SMS Code via MagicLight
+      setAutoLoginProgress('Solicitando código de verificación...');
+      const reqRes = await fetch(`${API_BASE}/send-sms-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: email, captchaCode: "", method: "signup", type: "email", inviteCode: " ", bdVid: "" })
       });
-      if (!res.ok) throw new Error('Error al enviar el código');
-      setStep('code');
-    } catch (err: any) {
-      setError(err.message || 'Error al enviar código');
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (!reqRes.ok) throw new Error('Error al solicitar el código a MagicLight');
 
-  const handleVerifyCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      // Signup
+      // 5. Poll for Email
+      setAutoLoginProgress('Esperando correo (puede tardar 10-20s)...');
+      let code = '';
+      for (let i = 0; i < 15; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const msgRes = await fetch('https://api.mail.tm/messages', {
+          headers: { 'Authorization': `Bearer ${mailToken}` }
+        });
+        const msgData = await msgRes.json();
+        const messages = msgData['hydra:member'];
+        
+        if (messages && messages.length > 0) {
+          const msgId = messages[0].id;
+          const msgDetailRes = await fetch(`https://api.mail.tm/messages/${msgId}`, {
+            headers: { 'Authorization': `Bearer ${mailToken}` }
+          });
+          const msgDetail = await msgDetailRes.json();
+          const text = msgDetail.text || msgDetail.html || msgDetail.intro || '';
+          
+          // Match 6 digit code or 4 digit code usually sent by these APIs
+          const match = text.match(/\b\d{4,6}\b/);
+          if (match) {
+            code = match[0];
+            break;
+          }
+        }
+      }
+
+      if (!code) throw new Error('El código de verificación no llegó a tiempo.');
+
+      // 6. Signup to MagicLight
+      setAutoLoginProgress('Código recibido! Registrando usuario...');
       const signupRes = await fetch(`${API_BASE}/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: "potrijugnu", password: `${email}1`, confirm: `${email}1`, phoneOrEmail: email, code, affiliation: " ", bdVid: "" })
+        body: JSON.stringify({ displayName: "u_" + randomStr, password: `${email}1`, confirm: `${email}1`, phoneOrEmail: email, code, affiliation: " ", bdVid: "" })
       });
-      if (!signupRes.ok) throw new Error('Error al registrar usuario');
+      if (!signupRes.ok) throw new Error('Error al registrar usuario en MagicLight');
 
-      // Signin
+      // 7. Signin to MagicLight
+      setAutoLoginProgress('Iniciando sesión...');
       const signinRes = await fetch(`${API_BASE}/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -55,12 +107,14 @@ export default function App() {
       });
       const signinData = await signinRes.json();
       if (signinData.code !== 200 || !signinData.data?.refreshToken) {
-        throw new Error('Error al iniciar sesión');
+        throw new Error('Error al iniciar sesión en MagicLight');
       }
+      
       setRefreshToken(signinData.data.refreshToken);
       setStep('generate');
     } catch (err: any) {
-      setError(err.message || 'Error al verificar código');
+      setError(err.message || 'Error en el login automático');
+      setStep('start');
     } finally {
       setLoading(false);
     }
@@ -142,36 +196,23 @@ export default function App() {
 
         {error && <div className="error-message">{error}</div>}
 
-        {step === 'email' && (
-          <form onSubmit={handleSendCode} className="form-group">
-            <label>Temporary Email</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              placeholder="user@tempmail.com" 
-              required 
-            />
-            <button type="submit" disabled={loading}>
-              {loading ? <span className="loader"></span> : 'Send SMS Code'}
+        {step === 'start' && (
+          <div className="form-group" style={{ textAlign: 'center' }}>
+            <p style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>
+              Accede directamente sin necesidad de correos. Generaremos una cuenta temporal y validaremos el acceso por vos de forma automática.
+            </p>
+            <button onClick={handleAutoLogin} disabled={loading}>
+              Iniciar Acceso Automático
             </button>
-          </form>
+          </div>
         )}
 
-        {step === 'code' && (
-          <form onSubmit={handleVerifyCode} className="form-group">
-            <label>Verification Code</label>
-            <input 
-              type="text" 
-              value={code} 
-              onChange={e => setCode(e.target.value)} 
-              placeholder="Enter numeric code" 
-              required 
-            />
-            <button type="submit" disabled={loading}>
-              {loading ? <span className="loader"></span> : 'Verify & Login'}
-            </button>
-          </form>
+        {step === 'auto-login' && (
+          <div className="generating-state">
+            <div className="spinner-large"></div>
+            <h3>Autenticando...</h3>
+            <p>{autoLoginProgress}</p>
+          </div>
         )}
 
         {step === 'generate' && (
