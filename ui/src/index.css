@@ -1,16 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --primary: #8a2be2;
-  --primary-hover: #9d4edd;
-  --bg-color: #0f172a;
-  --panel-bg: rgba(30, 41, 59, 0.7);
+  --primary: #bd00ff;
+  --primary-hover: #9900cf;
+  --secondary: #00e0ff;
+  --tertiary: #ff007a;
+  --bg-color: #0a0a0b;
+  --panel-bg: rgba(19, 19, 20, 0.4);
   --panel-border: rgba(255, 255, 255, 0.1);
-  --text-main: #f8fafc;
-  --text-muted: #94a3b8;
-  --input-bg: rgba(15, 23, 42, 0.6);
-  --input-border: rgba(255, 255, 255, 0.15);
-  --error-color: #ef4444;
+  --text-main: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.6);
+  --input-bg: rgba(0, 0, 0, 0.3);
+  --input-border: rgba(255, 255, 255, 0.1);
+  --error-color: #ffb4ab;
 }
 
 * {
@@ -20,7 +22,7 @@
 }
 
 body {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   background-color: var(--bg-color);
   color: var(--text-main);
   min-height: 100vh;
@@ -32,10 +34,11 @@ body {
 }
 
 .app-container {
-  width: 100%;
-  max-width: 900px;
+  width: 95%;
+  max-width: 1800px;
   position: relative;
   z-index: 10;
+  transition: all 0.3s ease;
 }
 
 .ambient-background {
@@ -46,19 +49,19 @@ body {
   height: 100vh;
   z-index: 0;
   background: 
-    radial-gradient(circle at 15% 50%, rgba(138, 43, 226, 0.15), transparent 25%),
-    radial-gradient(circle at 85% 30%, rgba(56, 189, 248, 0.15), transparent 25%);
+    radial-gradient(circle at 0% 0%, rgba(189, 0, 255, 0.15), transparent 40%),
+    radial-gradient(circle at 100% 100%, rgba(0, 224, 255, 0.15), transparent 40%),
+    radial-gradient(circle at 100% 0%, rgba(255, 0, 122, 0.1), transparent 40%);
   pointer-events: none;
 }
 
 .glass-panel {
   background: var(--panel-bg);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid var(--panel-border);
   border-radius: 24px;
-  padding: 3rem 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 0 40px rgba(189, 0, 255, 0.05);
   transition: all 0.3s ease;
   animation: slideUp 0.5s ease-out;
 }
@@ -73,7 +76,7 @@ body {
   font-weight: 700;
   text-align: center;
   margin-bottom: 0.5rem;
-  background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -86,10 +89,28 @@ body {
 }
 
 .jobs-container {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 1.5rem;
   margin-bottom: 2rem;
+}
+
+@media (min-width: 1024px) {
+  .jobs-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1300px) {
+  .jobs-container {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1600px) {
+  .jobs-container {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .job-card {
@@ -98,6 +119,12 @@ body {
   border-radius: 16px;
   padding: 1.5rem;
   animation: fadeIn 0.4s ease;
+  transition: all 0.2s ease;
+}
+
+.job-card:hover {
+  box-shadow: 0 0 15px rgba(189, 0, 255, 0.1);
+  border-color: rgba(189, 0, 255, 0.3);
 }
 
 .job-header {
@@ -109,7 +136,8 @@ body {
 
 .job-header h3 {
   font-size: 1.1rem;
-  color: #e0c3fc;
+  color: var(--text-main);
+  font-weight: 600;
 }
 
 .remove-btn {
@@ -139,7 +167,7 @@ textarea {
   padding: 1rem 1.2rem;
   color: var(--text-main);
   font-size: 1rem;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   transition: all 0.2s ease;
   resize: vertical;
 }
@@ -147,7 +175,7 @@ textarea {
 textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(138, 43, 226, 0.2);
+  box-shadow: 0 0 10px rgba(189, 0, 255, 0.2);
 }
 
 textarea:disabled {
@@ -161,7 +189,7 @@ textarea:disabled {
   gap: 0.8rem;
   margin-top: 1rem;
   padding: 1rem;
-  background: rgba(138, 43, 226, 0.1);
+  background: rgba(189, 0, 255, 0.1);
   border-radius: 8px;
   border-left: 4px solid var(--primary);
 }
@@ -199,7 +227,7 @@ button {
   background: var(--primary);
   color: white;
   border: none;
-  border-radius: 12px;
+  border-radius: 3rem; /* Pill shaped buttons */
   padding: 1rem;
   font-size: 1.1rem;
   font-weight: 600;
@@ -209,12 +237,12 @@ button {
   justify-content: center;
   align-items: center;
   height: 56px;
+  background: linear-gradient(135deg, var(--primary), #7a00a6);
 }
 
 button:hover:not(:disabled) {
-  background: var(--primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 10px 20px -10px var(--primary);
+  box-shadow: 0 0 20px rgba(189, 0, 255, 0.4);
 }
 
 button:disabled {
@@ -225,8 +253,9 @@ button:disabled {
 }
 
 .secondary-btn {
-  background: transparent;
-  border: 1px dashed var(--panel-border);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
 }
 
 .secondary-btn:hover:not(:disabled) {
@@ -281,4 +310,10 @@ button:disabled {
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+@media (min-width: 1920px) {
+  .app-container {
+    max-width: 98%;
+  }
 }
