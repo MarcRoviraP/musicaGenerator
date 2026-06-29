@@ -98,14 +98,13 @@ export default function App() {
 
     while (!success) {
       try {
-        // 1. Get Domains
+        // 1 & 2. Create Account with Mail.tm
+        updateJobState(job.id, { subStatus: `Intento ${attempt}: Creando email temporal...` });
+        
         const domRes = await fetch('https://api.mail.tm/domains');
         const domData = await domRes.json();
-        if (!domData['hydra:member'] || domData['hydra:member'].length === 0) throw new Error('No hay dominios');
         const domain = domData['hydra:member'][0].domain;
 
-        // 2. Create Account
-        updateJobState(job.id, { subStatus: `Intento ${attempt}: Creando email temporal...` });
         const randomStr = Math.random().toString(36).substring(2, 10);
         const email = `${randomStr}@${domain}`;
         const password = `${randomStr}123!`;
@@ -115,16 +114,14 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: email, password })
         });
-        if (!accRes.ok) throw new Error('Error al crear email');
+        if (!accRes.ok) throw new Error('Error al crear email en Mail.tm');
 
-        // 3. Get Token
         const tokenRes = await fetch('https://api.mail.tm/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: email, password })
         });
         const { token: mailToken } = await tokenRes.json();
-        if (!mailToken) throw new Error('Error obteniendo token del correo');
 
         // 4. Send SMS Code
         updateJobState(job.id, { subStatus: 'Solicitando código a MagicLight...' });
@@ -140,15 +137,21 @@ export default function App() {
         let code = '';
         for (let i = 0; i < 20; i++) {
           await new Promise(r => setTimeout(r, 3000));
-          const msgRes = await fetch('https://api.mail.tm/messages', { headers: { 'Authorization': `Bearer ${mailToken}` } });
+          const msgRes = await fetch('https://api.mail.tm/messages', {
+            headers: { 'Authorization': `Bearer ${mailToken}` }
+          });
+          if (!msgRes.ok) continue;
           const msgData = await msgRes.json();
           const messages = msgData['hydra:member'];
           
           if (messages && messages.length > 0) {
             const msgId = messages[0].id;
-            const msgDetailRes = await fetch(`https://api.mail.tm/messages/${msgId}`, { headers: { 'Authorization': `Bearer ${mailToken}` } });
+            const msgDetailRes = await fetch(`https://api.mail.tm/messages/${msgId}`, {
+              headers: { 'Authorization': `Bearer ${mailToken}` }
+            });
             const msgDetail = await msgDetailRes.json();
             const text = msgDetail.text || msgDetail.html || msgDetail.intro || '';
+            
             const match = text.match(/\b\d{4,6}\b/);
             if (match) { code = match[0]; break; }
           }
@@ -160,7 +163,7 @@ export default function App() {
         const signupRes = await fetch(`${API_BASE}/signup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ displayName: "u_" + randomStr, password: `${email}1`, confirm: `${email}1`, phoneOrEmail: email, code, affiliation: " ", bdVid: "" })
+          body: JSON.stringify({ displayName: "u_" + randomStr, password: password, confirm: password, phoneOrEmail: email, code, affiliation: " ", bdVid: "" })
         });
         if (!signupRes.ok) throw new Error('Error registrando usuario');
 
@@ -169,7 +172,7 @@ export default function App() {
         const signinRes = await fetch(`${API_BASE}/signin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: email, password: `${email}1` })
+          body: JSON.stringify({ phone: email, password: password })
         });
         const signinData = await signinRes.json();
         if (signinData.code !== 200 || !signinData.data?.refreshToken) throw new Error('Error al loguear');
