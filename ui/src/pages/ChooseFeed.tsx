@@ -15,7 +15,6 @@ export default function ChooseFeed({ onNavigateBack }: { onNavigateBack: () => v
   const [audioDuration, setAudioDuration] = useState(0);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isGeneratingRef = useRef(false);
   const tracksRef = useRef<GeneratedTrack[]>([]);
   const currentIndexRef = useRef(0);
 
@@ -28,54 +27,60 @@ export default function ChooseFeed({ onNavigateBack }: { onNavigateBack: () => v
     currentIndexRef.current = currentIndex;
   }, [currentIndex]);
 
-  // Gestor de cola continua: mantiene al menos 3 pistas por delante
-  const checkAndRefillQueue = async () => {
-    if (isGeneratingRef.current) return;
-
-    const availableAhead = tracksRef.current.length - currentIndexRef.current;
-    if (availableAhead >= 3) return;
-
-    isGeneratingRef.current = true;
-    setIsGenerating(true);
-
-    try {
-      setWorkerStatus('Consultando prompt a Groq...');
-      const { prompt, genre, title, styleId } = await generateGroqPromptForTikTok();
-      
-      setWorkerStatus(`Creando pista de ${genre} (${title})...`);
-      const newTrack = await createAndPollTrack(prompt, styleId, genre, title, (msg) => {
-        setWorkerStatus(`[${genre}] ${msg}`);
-      });
-
-      setTracks(prev => {
-        const next = [...prev, newTrack];
-        tracksRef.current = next;
-        return next;
-      });
-
-      setWorkerStatus('Pista lista en la cola.');
-    } catch (err: any) {
-      console.error('Error en ciclo de cola TikTok:', err);
-      setWorkerStatus(`Error: ${err.message || err}. Reintentando en 6s...`);
-      await new Promise(r => setTimeout(r, 6000));
-    } finally {
-      isGeneratingRef.current = false;
-      setIsGenerating(false);
-      // Volver a comprobar si se necesita otra pista para alcanzar el mínimo de 3
-      const remainingAhead = tracksRef.current.length - currentIndexRef.current;
-      if (remainingAhead < 3) {
-        checkAndRefillQueue();
-      }
-    }
-  };
-
-  // Arrancar el ciclo de fondo
+  // Gestor de cola continua: bucle secuencial a prueba de cancelaciones y con backoff
   useEffect(() => {
-    checkAndRefillQueue();
-    const interval = setInterval(() => {
-      checkAndRefillQueue();
-    }, 4000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+
+    const runQueueWorker = async () => {
+      while (!cancelled) {
+        const availableAhead = tracksRef.current.length - currentIndexRef.current;
+        if (availableAhead >= 3) {
+          // Ya hay colchón suficiente de pistas preparadas
+          await new Promise(r => setTimeout(r, 3000));
+          continue;
+        }
+
+        try {
+          setIsGenerating(true);
+          setWorkerStatus('Consultando prompt a Groq...');
+          const { prompt, genre, title, styleId } = await generateGroqPromptForTikTok();
+          if (cancelled) break;
+
+          setWorkerStatus(`Creando pista de ${genre} (${title})...`);
+          const newTrack = await createAndPollTrack(prompt, styleId, genre, title, (msg) => {
+            if (!cancelled) setWorkerStatus(`[${genre}] ${msg}`);
+          });
+          if (cancelled) break;
+
+          setTracks(prev => {
+            const next = [...prev, newTrack];
+            tracksRef.current = next;
+            return next;
+          });
+
+          setWorkerStatus('Pista lista en la cola.');
+          // Pausa suave de 3s para no saturar APIs ni buzones temporales
+          await new Promise(r => setTimeout(r, 3000));
+        } catch (err: any) {
+          console.error('Error en ciclo de cola TikTok:', err);
+          const errMsg = err?.message || String(err);
+          const isRateLimit = errMsg.includes('429') || errMsg.includes('Too Many Requests');
+          const backoff = isRateLimit ? 15000 : 6000;
+          setWorkerStatus(`Aviso: ${errMsg.slice(0, 90)}. Reintentando en ${backoff / 1000}s...`);
+          await new Promise(r => setTimeout(r, backoff));
+        } finally {
+          if (!cancelled) {
+            setIsGenerating(false);
+          }
+        }
+      }
+    };
+
+    runQueueWorker();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Manejo de reproducción al cambiar de pista

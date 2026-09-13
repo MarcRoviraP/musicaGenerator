@@ -10,8 +10,8 @@ export interface GeneratedTrack {
   createdAt: number;
 }
 
-const API_BASE = 'https://api.magiclight.ai/api/user';
-const SERVER_BASE = 'https://server.magiclight.ai/task-schedule/music';
+const API_BASE = '/api/magiclight-user';
+const SERVER_BASE = '/api/magiclight-server';
 const MAIL_API_BASE = '/api/mailtm';
 
 export async function fetchActiveGroqModel(apiKey?: string): Promise<string> {
@@ -27,10 +27,10 @@ export async function fetchActiveGroqModel(apiKey?: string): Promise<string> {
     if (!res.ok) return 'llama-3.3-70b-versatile';
     const data = await res.json();
     const models = (data.data || [])
-      .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard'))
+      .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard') && !m.id.toLowerCase().includes('canopy'))
       .map((m: any) => m.id as string);
-    const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b'));
-    return preferred || models[0] || 'llama-3.3-70b-versatile';
+    const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models.find((id: string) => id.includes('llama') || id.includes('mixtral'));
+    return preferred || 'llama-3.3-70b-versatile';
   } catch {
     return 'llama-3.3-70b-versatile';
   }
@@ -54,6 +54,7 @@ export async function generateGroqPromptForTikTok(modelName?: string): Promise<{
     },
     body: JSON.stringify({
       model,
+      max_tokens: 350,
       messages: [
         {
           role: 'system',

@@ -10,6 +10,18 @@
   force = true
 
 [[redirects]]
+  from = "/api/magiclight-user/*"
+  to = "https://api.magiclight.ai/api/user/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/magiclight-server/*"
+  to = "https://server.magiclight.ai/task-schedule/music/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

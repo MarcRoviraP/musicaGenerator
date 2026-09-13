@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import './index.css';
 import ChooseFeed from './pages/ChooseFeed';
 
-const API_BASE = 'https://api.magiclight.ai/api/user';
-const SERVER_BASE = 'https://server.magiclight.ai/task-schedule/music';
+const API_BASE = '/api/magiclight-user';
+const SERVER_BASE = '/api/magiclight-server';
 const MAIL_API_BASE = '/api/mailtm';
 
 type Job = {
@@ -65,7 +65,7 @@ export default function App() {
       }
       const data = await res.json();
       const models = (data.data || [])
-        .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard'))
+        .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard') && !m.id.toLowerCase().includes('canopy'))
         .map((m: any) => m.id as string)
         .sort();
 
@@ -74,7 +74,7 @@ export default function App() {
       if (models.length > 0) {
         setSelectedModel(current => {
           if (current && models.includes(current)) return current;
-          const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models[0];
+          const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models.find((id: string) => id.includes('llama') || id.includes('mixtral')) || models[0];
           return preferred;
         });
       }
@@ -94,7 +94,7 @@ export default function App() {
       let modelToUse = selectedModel;
       if (!modelToUse) {
         const fetched = await fetchGroqModels();
-        modelToUse = fetched.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched[0];
+        modelToUse = fetched.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched.find((id: string) => id.includes('llama') || id.includes('mixtral')) || fetched[0] || 'llama-3.3-70b-versatile';
         if (!modelToUse) {
           throw new Error('No se pudieron obtener modelos disponibles de Groq. Verifica tu VITE_GROQ_KEY.');
         }
@@ -290,7 +290,7 @@ export default function App() {
 
   useEffect(() => {
     fetchGroqModels();
-    fetch('https://server.magiclight.ai/task-schedule/music/styles')
+    fetch(`${SERVER_BASE}/styles`)
       .then(r => r.json())
       .then(d => {
         if (d.data?.styles) setStylesList(d.data.styles);

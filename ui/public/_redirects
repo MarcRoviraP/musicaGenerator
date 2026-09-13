@@ -1,2 +1,4 @@
 /api/mailtm/*  https://api.mail.tm/:splat  200!
+/api/magiclight-user/*  https://api.magiclight.ai/api/user/:splat  200!
+/api/magiclight-server/*  https://server.magiclight.ai/task-schedule/music/:splat  200!
 /*  /index.html  200
