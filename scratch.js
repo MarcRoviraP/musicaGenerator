@@ -1,8 +1,9 @@
 async function test() {
+  const apiKey = process.env.GROQ_API_KEY || process.env.VITE_GROQ_KEY;
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer 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`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({

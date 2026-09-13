@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import './index.css';
+import ChooseFeed from './pages/ChooseFeed';
 
 const API_BASE = 'https://api.magiclight.ai/api/user';
 const SERVER_BASE = 'https://server.magiclight.ai/task-schedule/music';
+const MAIL_API_BASE = '/api/mailtm';
 
 type Job = {
   id: string;
@@ -17,18 +19,87 @@ type Job = {
 };
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState<string>(() => window.location.pathname);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = (path: string) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
+  };
+
   const [jobs, setJobs] = useState<Job[]>([
     { id: 'initial-1', prompt: '', status: 'idle', subStatus: '' }
   ]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [basePrompt, setBasePrompt] = useState('');
   const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);
+  const [variationCount, setVariationCount] = useState<number>(10);
   const [stylesList, setStylesList] = useState<any[]>([]);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>(import.meta.env.VITE_GROQ_MODEL || '');
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
+
+  const fetchGroqModels = async (): Promise<string[]> => {
+    const apiKey = import.meta.env.VITE_GROQ_KEY;
+    if (!apiKey) {
+      console.warn('VITE_GROQ_KEY is missing');
+      return [];
+    }
+    setIsLoadingModels(true);
+    try {
+      const res = await fetch('https://api.groq.com/openai/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (!res.ok) {
+        throw new Error(`Groq API models error (${res.status})`);
+      }
+      const data = await res.json();
+      const models = (data.data || [])
+        .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard'))
+        .map((m: any) => m.id as string)
+        .sort();
+
+      setAvailableModels(models);
+
+      if (models.length > 0) {
+        setSelectedModel(current => {
+          if (current && models.includes(current)) return current;
+          const preferred = models.find(id => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models[0];
+          return preferred;
+        });
+      }
+      return models;
+    } catch (err: any) {
+      console.error('Error fetching Groq models:', err);
+      return [];
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
 
   const generateVariations = async () => {
     if (!basePrompt.trim()) return;
     setIsGeneratingPrompts(true);
     try {
+      let modelToUse = selectedModel;
+      if (!modelToUse) {
+        const fetched = await fetchGroqModels();
+        modelToUse = fetched.find(id => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched[0];
+        if (!modelToUse) {
+          throw new Error('No se pudieron obtener modelos disponibles de Groq. Verifica tu VITE_GROQ_KEY.');
+        }
+      }
+
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -36,13 +107,13 @@ export default function App() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
+          model: modelToUse,
           messages: [{ 
             role: 'system', 
-            content: `You are an AI that writes prompt variations for music generation. Output ONLY a valid JSON object with a single key "variations" containing an array of 10 objects, each with "prompt" (string) and "styleId" (number). Do not include markdown blocks or any other text. Available styles:\n${stylesList.map(s => `ID: ${s.musicStyleId}, Name: ${s.styleName}, Desc: ${s.prompt}`).join('\n')}\nPick the best styleId for each prompt.` 
+            content: `You are an AI that writes prompt variations for music generation. Output ONLY a valid JSON object with a single key "variations" containing an array of ${variationCount} objects, each with "prompt" (string) and "styleId" (number). Do not include markdown blocks or any other text. Available styles:\n${stylesList.map(s => `ID: ${s.musicStyleId}, Name: ${s.styleName}, Desc: ${s.prompt}`).join('\n')}\nPick the best styleId for each prompt.` 
           }, { 
             role: 'user', 
-            content: `Generate 10 different detailed prompt variations based on this idea: "${basePrompt}"` 
+            content: `Generate ${variationCount} different detailed prompt variations based on this idea: "${basePrompt}"` 
           }]
         })
       });
@@ -101,7 +172,7 @@ export default function App() {
         // 1 & 2. Create Account with Mail.tm
         updateJobState(job.id, { subStatus: `Intento ${attempt}: Creando email temporal...` });
         
-        const domRes = await fetch('https://api.mail.tm/domains');
+        const domRes = await fetch(`${MAIL_API_BASE}/domains`);
         const domData = await domRes.json();
         const domain = domData['hydra:member'][0].domain;
 
@@ -109,14 +180,14 @@ export default function App() {
         const email = `${randomStr}@${domain}`;
         const password = `${randomStr}123!`;
         
-        const accRes = await fetch('https://api.mail.tm/accounts', {
+        const accRes = await fetch(`${MAIL_API_BASE}/accounts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: email, password })
         });
         if (!accRes.ok) throw new Error('Error al crear email en Mail.tm');
 
-        const tokenRes = await fetch('https://api.mail.tm/token', {
+        const tokenRes = await fetch(`${MAIL_API_BASE}/token`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ address: email, password })
@@ -137,7 +208,7 @@ export default function App() {
         let code = '';
         for (let i = 0; i < 20; i++) {
           await new Promise(r => setTimeout(r, 3000));
-          const msgRes = await fetch('https://api.mail.tm/messages', {
+          const msgRes = await fetch(`${MAIL_API_BASE}/messages`, {
             headers: { 'Authorization': `Bearer ${mailToken}` }
           });
           if (!msgRes.ok) continue;
@@ -146,7 +217,7 @@ export default function App() {
           
           if (messages && messages.length > 0) {
             const msgId = messages[0].id;
-            const msgDetailRes = await fetch(`https://api.mail.tm/messages/${msgId}`, {
+            const msgDetailRes = await fetch(`${MAIL_API_BASE}/messages/${msgId}`, {
               headers: { 'Authorization': `Bearer ${mailToken}` }
             });
             const msgDetail = await msgDetailRes.json();
@@ -218,6 +289,7 @@ export default function App() {
   };
 
   useEffect(() => {
+    fetchGroqModels();
     fetch('https://server.magiclight.ai/task-schedule/music/styles')
       .then(r => r.json())
       .then(d => {
@@ -261,40 +333,103 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  if (currentPath === '/choose') {
+    return <ChooseFeed onNavigateBack={() => navigate('/')} />;
+  }
+
   return (
     <div className="app-container">
-      <div className="glass-panel">
-        <h1 className="title">MusicGen Bulk</h1>
-        <p className="subtitle">Genera canciones independientes evadiendo límites</p>
+      <nav className="app-navbar">
+        <button 
+          className={`nav-tab ${currentPath !== '/choose' ? 'active' : ''}`}
+          onClick={() => navigate('/')}
+        >
+          📦 Generador en Lote
+        </button>
+        <button 
+          className={`nav-tab ${currentPath === '/choose' ? 'active' : ''}`}
+          onClick={() => navigate('/choose')}
+        >
+          🎵 Feed TikTok (/choose)
+        </button>
+      </nav>
 
-        <div className="generator-header" style={{ marginBottom: '2rem' }}>
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'stretch' }}>
+      <div className="glass-panel">
+        <header className="header-section">
+          <div className="badge-pill">
+            <span className="badge-dot"></span>
+            Generador IA Musical por Lotes
+          </div>
+          <h1 className="title">Music Generator</h1>
+          <p className="subtitle">Crea prompts inteligentes, gestiona variaciones y genera pistas independientes sin límites.</p>
+        </header>
+
+        <section className="generator-card">
+          <div className="generator-topbar">
+            <span className="generator-section-title">
+              ✨ Asistente de Prompts
+            </span>
+            <div className="model-selector-group">
+              <label className="model-label">Modelo Groq:</label>
+              {isLoadingModels ? (
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Cargando modelos...</span>
+              ) : (
+                <select
+                  value={selectedModel}
+                  onChange={e => setSelectedModel(e.target.value)}
+                  disabled={isGeneratingPrompts}
+                  className="select-control"
+                >
+                  {availableModels.length === 0 && selectedModel && (
+                    <option value={selectedModel}>{selectedModel}</option>
+                  )}
+                  {availableModels.map(m => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+          <div className="generator-form-row">
             <textarea 
               value={basePrompt}
               onChange={e => setBasePrompt(e.target.value)}
-              placeholder="Ej: Escribe un prompt base para que la IA genere 10 variaciones..."
-              style={{ flex: 1, minHeight: '60px' }}
+              placeholder={`Ej: Escribe una idea base para que la IA genere ${variationCount} ${variationCount === 1 ? 'variación musical' : 'variaciones musicales'} con estilos afines...`}
+              className="generator-textarea"
             />
+            <select
+              value={variationCount}
+              onChange={e => setVariationCount(Number(e.target.value))}
+              disabled={isGeneratingPrompts}
+              className="select-control count-select"
+            >
+              <option value={1}>1 versión</option>
+              <option value={2}>2 versiones</option>
+              <option value={5}>5 versiones</option>
+              <option value={10}>10 versiones</option>
+            </select>
             <button 
               onClick={generateVariations}
               disabled={isGeneratingPrompts || !basePrompt.trim()}
-              style={{ padding: '0 2rem', background: 'linear-gradient(135deg, #8a2be2, #38bdf8)' }}
+              className="btn-generate"
             >
-              {isGeneratingPrompts ? 'Generando...' : '✨ Generar 10 Variaciones'}
+              {isGeneratingPrompts ? 'Generando...' : `✨ Generar ${variationCount} ${variationCount === 1 ? 'Versión' : 'Versiones'}`}
             </button>
           </div>
-        </div>
+        </section>
 
         <div className="jobs-container">
           {jobs.map((job, index) => (
             <div key={job.id} className="job-card">
               <div className="job-header">
-                <h3>Prompt #{index + 1}</h3>
+                <span className="prompt-badge">Prompt #{index + 1}</span>
                 <select 
                   value={job.styleId || 8} 
                   onChange={e => updateJobState(job.id, { styleId: Number(e.target.value) })}
                   disabled={job.status !== 'idle' && job.status !== 'error'}
-                  style={{ marginLeft: '1rem', flex: 1, padding: '0.2rem', borderRadius: '4px', background: 'rgba(0,0,0,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+                  className="select-control job-style-select"
                 >
                   {stylesList.map(s => (
                     <option key={s.musicStyleId} value={s.musicStyleId}>
@@ -303,14 +438,14 @@ export default function App() {
                   ))}
                 </select>
                 {jobs.length > 1 && job.status === 'idle' && (
-                  <button className="remove-btn" onClick={() => removePrompt(job.id)}>✕</button>
+                  <button className="remove-btn" onClick={() => removePrompt(job.id)} title="Eliminar prompt">✕</button>
                 )}
               </div>
               
               <textarea 
                 value={job.prompt} 
                 onChange={e => updateJobPrompt(job.id, e.target.value)} 
-                placeholder="A fast-paced synthwave track..." 
+                placeholder="Describe los instrumentos, ritmo, vibra musical..." 
                 rows={3}
                 disabled={job.status !== 'idle' && job.status !== 'error'}
               />
@@ -346,14 +481,14 @@ export default function App() {
           ))}
         </div>
 
-        <div className="action-buttons">
+        <footer className="action-buttons">
           <button className="secondary-btn" onClick={addPrompt} disabled={isProcessing}>
             + Añadir Otro Prompt
           </button>
           <button className="primary-btn" onClick={startAll} disabled={isProcessing || jobs.every(j => j.status !== 'idle' && j.status !== 'error')}>
             {isProcessing ? 'Iniciando Trabajos...' : '🚀 Generar Todas las Canciones'}
           </button>
-        </div>
+        </footer>
       </div>
       <div className="ambient-background"></div>
     </div>
