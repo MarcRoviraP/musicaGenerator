@@ -65,17 +65,21 @@ export default function App() {
       }
       const data = await res.json();
       const models = (data.data || [])
-        .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard') && !m.id.toLowerCase().includes('canopy'))
-        .map((m: any) => m.id as string)
-        .sort();
+        .filter((m: any) => {
+          if (m.active === false) return false;
+          const id = (m.id || '').toLowerCase();
+          if (id.includes('whisper') || id.includes('guard') || id.includes('embed') || id.includes('canopy')) return false;
+          if (Array.isArray(m.output_modalities) && !m.output_modalities.includes('text')) return false;
+          return true;
+        })
+        .map((m: any) => m.id as string);
 
       setAvailableModels(models);
 
       if (models.length > 0) {
         setSelectedModel(current => {
           if (current && models.includes(current)) return current;
-          const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models.find((id: string) => id.includes('llama') || id.includes('mixtral')) || models[0];
-          return preferred;
+          return models[0];
         });
       }
       return models;
@@ -94,7 +98,7 @@ export default function App() {
       let modelToUse = selectedModel;
       if (!modelToUse) {
         const fetched = await fetchGroqModels();
-        modelToUse = fetched.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched.find((id: string) => id.includes('llama') || id.includes('mixtral')) || fetched[0] || 'llama-3.3-70b-versatile';
+        modelToUse = fetched[0] || 'openai/gpt-oss-20b';
         if (!modelToUse) {
           throw new Error('No se pudieron obtener modelos disponibles de Groq. Verifica tu VITE_GROQ_KEY.');
         }

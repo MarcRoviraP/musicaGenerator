@@ -16,7 +16,7 @@ const MAIL_API_BASE = '/api/mailtm';
 
 export async function fetchActiveGroqModel(apiKey?: string): Promise<string> {
   const key = apiKey || import.meta.env.VITE_GROQ_KEY;
-  if (!key) return 'llama-3.3-70b-versatile';
+  if (!key) return 'openai/gpt-oss-20b';
   try {
     const res = await fetch('https://api.groq.com/openai/v1/models', {
       headers: {
@@ -24,15 +24,21 @@ export async function fetchActiveGroqModel(apiKey?: string): Promise<string> {
         'Content-Type': 'application/json'
       }
     });
-    if (!res.ok) return 'llama-3.3-70b-versatile';
+    if (!res.ok) return 'openai/gpt-oss-20b';
     const data = await res.json();
     const models = (data.data || [])
-      .filter((m: any) => m.active !== false && !m.id.toLowerCase().includes('whisper') && !m.id.toLowerCase().includes('embed') && !m.id.toLowerCase().includes('guard') && !m.id.toLowerCase().includes('canopy'))
+      .filter((m: any) => {
+        if (m.active === false) return false;
+        const id = (m.id || '').toLowerCase();
+        if (id.includes('whisper') || id.includes('guard') || id.includes('embed') || id.includes('canopy')) return false;
+        if (Array.isArray(m.output_modalities) && !m.output_modalities.includes('text')) return false;
+        return true;
+      })
       .map((m: any) => m.id as string);
-    const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models.find((id: string) => id.includes('llama') || id.includes('mixtral'));
-    return preferred || 'llama-3.3-70b-versatile';
+
+    return models[0] || 'openai/gpt-oss-20b';
   } catch {
-    return 'llama-3.3-70b-versatile';
+    return 'openai/gpt-oss-20b';
   }
 }
 
