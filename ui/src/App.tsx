@@ -74,7 +74,7 @@ export default function App() {
       if (models.length > 0) {
         setSelectedModel(current => {
           if (current && models.includes(current)) return current;
-          const preferred = models.find(id => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models[0];
+          const preferred = models.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || models[0];
           return preferred;
         });
       }
@@ -94,7 +94,7 @@ export default function App() {
       let modelToUse = selectedModel;
       if (!modelToUse) {
         const fetched = await fetchGroqModels();
-        modelToUse = fetched.find(id => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched[0];
+        modelToUse = fetched.find((id: string) => id.includes('llama-3.3') || id.includes('llama-3.1-8b') || id.includes('llama3-8b')) || fetched[0];
         if (!modelToUse) {
           throw new Error('No se pudieron obtener modelos disponibles de Groq. Verifica tu VITE_GROQ_KEY.');
         }

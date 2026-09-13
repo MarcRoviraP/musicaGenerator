@@ -1,0 +1,15 @@
+[build]
+  base = "ui"
+  publish = "dist"
+  command = "npm run build"
+
+[[redirects]]
+  from = "/api/mailtm/*"
+  to = "https://api.mail.tm/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
