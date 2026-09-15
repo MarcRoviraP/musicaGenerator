@@ -34,8 +34,8 @@ export default function ChooseFeed({ onNavigateBack }: { onNavigateBack: () => v
     const runQueueWorker = async () => {
       while (!cancelled) {
         const availableAhead = tracksRef.current.length - currentIndexRef.current;
-        if (availableAhead >= 3) {
-          // Ya hay colchón suficiente de pistas preparadas
+        if (availableAhead >= 5) {
+          // Ya hay colchón suficiente de pistas preparadas (4 canciones en cola)
           await new Promise(r => setTimeout(r, 3000));
           continue;
         }

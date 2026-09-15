@@ -42,6 +42,17 @@ export async function fetchActiveGroqModel(apiKey?: string): Promise<string> {
   }
 }
 
+export interface MagicLightStyleRef {
+  id: number;
+  name: string;
+  desc: string;
+}
+
+export const KNOWN_MAGICLIGHT_STYLES: MagicLightStyleRef[] = [
+  { id: 8, name: 'Modern Pop', desc: 'Modern mainstream pop, catchy synth leads, tight radio-ready groove, punchy kick' },
+  { id: 10, name: 'Rock', desc: 'Modern energetic rock band, electric guitars, punchy drums, driving bass' },
+];
+
 export async function generateGroqPromptForTikTok(modelName?: string): Promise<{ prompt: string; genre: string; title: string; styleId: number }> {
   const apiKey = import.meta.env.VITE_GROQ_KEY;
   if (!apiKey) {
@@ -49,8 +60,7 @@ export async function generateGroqPromptForTikTok(modelName?: string): Promise<{
   }
 
   const model = modelName || await fetchActiveGroqModel(apiKey);
-  const genres = ['Trap', 'Electronica', 'Pop', 'Rave', 'Rap'];
-  const randomGenre = genres[Math.floor(Math.random() * genres.length)];
+  const targetStyle = KNOWN_MAGICLIGHT_STYLES[Math.floor(Math.random() * KNOWN_MAGICLIGHT_STYLES.length)];
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
@@ -64,11 +74,19 @@ export async function generateGroqPromptForTikTok(modelName?: string): Promise<{
       messages: [
         {
           role: 'system',
-          content: 'You are an elite music producer and prompt engineer. Output ONLY a valid raw JSON object with NO markdown formatting, NO triple backticks, and NO conversational text. The JSON object must have keys: "prompt" (string, rich production prompt in Spanish specifying musical atmosphere, tempo, instrumentation and lyrics concept in Spanish), "genre" (string, one of Trap, Electronica, Pop, Rave, Rap), "title" (string, creative Spanish song title), and "styleId" (number: 8 for Pop/Electronica, 10 for Rock/Rave, 2 for Energetic Pop, 11 for Blues/Rap).'
+          content: `You are an elite music producer and sound engineer. Your task is to output a single production-ready music prompt for an AI audio model that supports specific styles.
+CRITICAL FORMAT RULES:
+1. Output ONLY a valid raw JSON object with NO markdown, NO code fences, and NO conversational text.
+2. The JSON object must contain exactly:
+   - "genre": string (must be "${targetStyle.name}")
+   - "styleId": number (must be ${targetStyle.id})
+   - "title": string (catchy, creative song title in Spanish)
+   - "prompt": string (structured audio production prompt under 280 characters using tags: [Tempo: ... BPM] [Key: ...] [Instruments: ...] [Vocals: ...] [Mood: ...], with vocal style and lyrics direction in Spanish)
+3. Ensure high acoustic variety: alternate tempos, diverse instruments (e.g. 808s, Rhodes, overdriven guitars, analog synths), and dynamic vocal timbres.`
         },
         {
           role: 'user',
-          content: `Crea un prompt para una IA de musica con alguno de los siguientes temas: Trap, Electronica, Pop, Rave, Rap con letra en español. Enfoque prioritario: ${randomGenre}.`
+          content: `Compose a high-quality music production prompt for the style "${targetStyle.name}" (Audio profile: ${targetStyle.desc}). Make it sonically distinct, rich in instrumentation, and with Spanish vocal direction.`
         }
       ]
     })
@@ -82,13 +100,18 @@ export async function generateGroqPromptForTikTok(modelName?: string): Promise<{
   const data = await res.json();
   const rawContent = data.choices[0]?.message?.content || '{}';
   const cleanContent = rawContent.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
-  const parsed = JSON.parse(cleanContent);
+  let parsed: any = {};
+  try {
+    parsed = JSON.parse(cleanContent);
+  } catch {
+    console.warn('Failed to parse Groq JSON response, using fallback');
+  }
 
   return {
-    prompt: parsed.prompt || `Un tema enérgico de ${randomGenre} con ritmo potente, bajos profundos y letra en español.`,
-    genre: parsed.genre || randomGenre,
-    title: parsed.title || `${randomGenre} Español`,
-    styleId: Number(parsed.styleId) || (randomGenre === 'Pop' ? 8 : 10)
+    prompt: parsed.prompt || `[Style: ${targetStyle.name}] [Tempo: 120 BPM] [Instruments: Synths, Drums, Bass] [Vocals: Voz en español con melodía pegadiza]`,
+    genre: parsed.genre || targetStyle.name,
+    title: parsed.title || `${targetStyle.name} Español`,
+    styleId: Number(parsed.styleId) || targetStyle.id
   };
 }
 

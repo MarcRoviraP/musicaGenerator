@@ -114,7 +114,16 @@ export default function App() {
           model: modelToUse,
           messages: [{ 
             role: 'system', 
-            content: `You are an AI that writes prompt variations for music generation. Output ONLY a valid JSON object with a single key "variations" containing an array of ${variationCount} objects, each with "prompt" (string) and "styleId" (number). Do not include markdown blocks or any other text. Available styles:\n${stylesList.map(s => `ID: ${s.musicStyleId}, Name: ${s.styleName}, Desc: ${s.prompt}`).join('\n')}\nPick the best styleId for each prompt.` 
+            content: `You are an elite music producer and prompt engineer for AI audio generation.
+Generate ${variationCount} distinct, production-ready prompt variations based on the user's idea.
+CRITICAL FOR AUDIO QUALITY:
+- Do NOT output vague sentences. Use structured production descriptors: [Tempo: X BPM] [Key: X] [Instruments: X] [Vocals: X] [Mood: X].
+- Ensure high sonic contrast: vary tempos, musical keys (major/minor), instrumentation, and vocal timbres across each variation.
+- Available styles:
+${stylesList.map(s => `ID: ${s.musicStyleId}, Name: ${s.styleName}, Desc: ${s.prompt}`).join('\n')}
+Pick the most suitable styleId for each prompt variation from the available styles.
+
+Output ONLY a valid JSON object with a single key "variations" containing an array of ${variationCount} objects, each with "prompt" (string) and "styleId" (number). Do not include markdown blocks or any other text.` 
           }, { 
             role: 'user', 
             content: `Generate ${variationCount} different detailed prompt variations based on this idea: "${basePrompt}"` 
@@ -297,7 +306,10 @@ export default function App() {
     fetch(`${SERVER_BASE}/styles`)
       .then(r => r.json())
       .then(d => {
-        if (d.data?.styles) setStylesList(d.data.styles);
+        if (d.data?.styles) {
+          const allowedStyles = [8, 10, 11];
+          setStylesList(d.data.styles.filter((s: any) => allowedStyles.includes(s.musicStyleId)));
+        }
       })
       .catch(console.error);
 
